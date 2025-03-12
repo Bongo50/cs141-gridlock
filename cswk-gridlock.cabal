@@ -1,0 +1,88 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.37.0.
+--
+-- see: https://github.com/sol/hpack
+
+name:           cswk-gridlock
+version:        0.1.0.0
+author:         Alex Dixon
+maintainer:     alexander.dixon@warwick.ac.uk
+copyright:      2025 Alex Dixon
+license:        AllRightsReserved
+license-file:   LICENSE
+build-type:     Simple
+
+library
+  exposed-modules:
+      Gridlock.ColourSquares
+      Gridlock.DrawGrid
+      Gridlock.Parser
+      Gridlock.Types
+  other-modules:
+      Paths_cswk_gridlock
+  hs-source-dirs:
+      src
+  default-extensions:
+      LambdaCase
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-orphans -Wno-missing-export-lists
+  build-depends:
+      ansi-terminal
+    , base >=4.7 && <5
+    , containers
+    , megaparsec
+    , mtl
+    , parser-combinators
+    , pretty-simple
+  default-language: GHC2021
+
+executable cswk-gridlock
+  main-is: Main.hs
+  other-modules:
+      Paths_cswk_gridlock
+  hs-source-dirs:
+      app
+  default-extensions:
+      LambdaCase
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-orphans -Wno-missing-export-lists -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      ansi-terminal
+    , base >=4.7 && <5
+    , containers
+    , cswk-gridlock
+    , megaparsec
+    , mtl
+    , parser-combinators
+    , pretty-simple
+  default-language: GHC2021
+
+test-suite cswk-gridlock-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_cswk_gridlock
+  hs-source-dirs:
+      test
+  default-extensions:
+      LambdaCase
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-orphans -Wno-missing-export-lists -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , ansi-terminal
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , cryptohash-md5
+    , cswk-gridlock
+    , directory
+    , filepath
+    , megaparsec
+    , mtl
+    , parser-combinators
+    , pretty-simple
+    , random
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , tasty-reporter-muffled
+  default-language: GHC2021

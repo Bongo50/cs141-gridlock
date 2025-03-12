@@ -12,6 +12,7 @@ dependencies:
 - parser-combinators
 - ansi-terminal
 - pretty-simple
+- mtl
 
 ghc-options:
 - -Wall
