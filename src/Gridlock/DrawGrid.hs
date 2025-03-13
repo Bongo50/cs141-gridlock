@@ -1,14 +1,14 @@
 module Gridlock.DrawGrid where
 
 import Gridlock.ColourSquares (square)
-import Gridlock.Types ( Cell(..), Grid(rep, width, height) )
+import Gridlock.Types ( Cell(..), NxMGrid(rep'sq) )
 
 import Data.Map qualified as Map
 
 {-  drawGrid takes a Grid and outputs it as a human-readable String. It primarily works by using list comprehension
     to iterate through every key in the Grid's rep Map Coord Cell. A helper function, drawCell, is then used to
     obtain the String used to display the cell in the final output. These are concatonated with suitable borders. -}
-drawGrid :: Grid -> String
+drawGrid :: NxMGrid @n @m -> String
 drawGrid g = hBorder ++ "\n" ++
     {-  Note on the use of the partial function (Map.!): this will error if the provided key doesn't exist in 
         the provided Map, r = repG. However, as long as the provided Grid, g, contains the correct width and
@@ -19,6 +19,9 @@ drawGrid g = hBorder ++ "\n" ++
     concatMap addVBorder [ concatMap (drawCell . (rep g Map.!)) [(x,y) | x <- [0 ..  width g - 1]] | y <- [0 .. height g - 1] ]
     ++ hBorder
     where
+        width = natVal $ Proxy @n :: Integer
+        height = natVal $ Proxy @m :: Integer
+
         --  Horizontal border
         hBorder :: String
         hBorder = "+" ++ replicate (width g) '-' ++ "+"

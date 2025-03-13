@@ -45,3 +45,19 @@ data GameRecord = GameRecord
     -- ^ The list of colours in the game.
     }
     deriving (Eq, Ord, Read, Show)
+
+newtype NxMGrid (n:: Nat) (m :: Nat) = NxMGrid
+    { rep' :: Map Coord Cell
+    -- ^ The internal representation of the grid
+    }
+    deriving (Eq, Ord, Read, Show)
+
+data NxMGameRecord (n :: Nat) (m :: Nat) = NxMGameRecord
+    { players' :: [Player]
+    -- ^ The list of players in the game.
+    , grids' :: [NxMGrid @n @m]
+    -- ^ The list of grids as the game evolved.
+    , colours' :: Set Colour
+    -- ^ The list of colours in the game.
+    }
+    deriving (Eq, Ord, Read, Show)

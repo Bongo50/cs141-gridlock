@@ -25,6 +25,9 @@ library
       src
   default-extensions:
       LambdaCase
+      TypeApplications
+      KindSignatures
+      DataKinds
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-orphans -Wno-missing-export-lists
   build-depends:
       ansi-terminal
@@ -44,6 +47,9 @@ executable cswk-gridlock
       app
   default-extensions:
       LambdaCase
+      TypeApplications
+      KindSignatures
+      DataKinds
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-orphans -Wno-missing-export-lists -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       ansi-terminal
@@ -65,6 +71,9 @@ test-suite cswk-gridlock-test
       test
   default-extensions:
       LambdaCase
+      TypeApplications
+      KindSignatures
+      DataKinds
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-orphans -Wno-missing-export-lists -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
