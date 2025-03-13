@@ -53,6 +53,41 @@ parseGame = do
         string $ winner ++ " wins!"
         pure finalRecord
 
+parseMove :: GameRecord -> Parser GameRecord
+parseMove oldRecord = do
+    let gamePlayers = players oldRecord
+    let gameColours = colours oldRecord
+    let oldGrid = grids oldRecord !! (length (grids oldRecord) - 1)
+    let oldRep = rep oldGrid
+    let prevPlayer = gamePlayers !! (length (grids oldRecord) `mod` 2)
+    player <- manyTill alphaNumChar $ string " plays "
+    if player `notElem` gamePlayers then
+        fail $ player ++ "is an invalid player name."
+    else if player == prevPlayer then
+        fail $ player ++ " is moving out of turn."
+    else do
+        moveColour <- colour
+        if moveColour `notElem` gameColours then
+            fail $ show moveColour ++ " is an invalid colour."
+        else do
+            string " at "
+            (x,y) <- parseCoords
+            if x < 0 || x >= width oldGrid || y < 0 || y >= height oldGrid then
+                fail $ "Move at " ++ show (x,y) ++ " is invalid as it is out of bounds."
+            else if oldRep Map.! (x,y) /= Empty then
+                fail $ "Move at " ++ show (x,y) ++ " is invalid as this cell is already filled."
+            else if any ((== (Just $ Filled moveColour)) . (oldRep Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)] then
+                fail $ "Move at " ++ show (x,y) ++ " is invalid as an adjacent cell already has this colour."
+            else do
+                string "."
+                pure $ oldRecord {grids = grids oldRecord ++ [oldGrid {rep = Map.adjust (const $ Filled moveColour) (x,y) oldRep}]}
+
+parseMoves :: GameRecord -> Parser GameRecord
+parseMoves x = do
+    y <- parseMove x
+    some newline
+    try (parseMoves y) <|> pure y
+
 {-  canMove takes a GameRecord and checks if there is a valid move than can be made from it. This is in order to
     determine if a gridlock file reports the end of the game too early. -}
 canMove :: GameRecord -> Bool
@@ -99,41 +134,6 @@ parseColours = do
         colour
     char '.'
     pure $ Set.fromList $ c1 : colours
-
-parseMoves :: GameRecord -> Parser GameRecord
-parseMoves x = do
-    y <- parseMove x
-    some newline
-    try (parseMoves y) <|> pure y
-
-parseMove :: GameRecord -> Parser GameRecord
-parseMove oldRecord = do
-    let gamePlayers = players oldRecord
-    let gameColours = colours oldRecord
-    let oldGrid = grids oldRecord !! (length (grids oldRecord) - 1)
-    let oldRep = rep oldGrid
-    let prevPlayer = gamePlayers !! (length (grids oldRecord) `mod` 2)
-    player <- manyTill alphaNumChar $ string " plays "
-    if player `notElem` gamePlayers then
-        fail $ player ++ "is an invalid player name."
-    else if player == prevPlayer then
-        fail $ player ++ " is moving out of turn."
-    else do
-        moveColour <- colour
-        if moveColour `notElem` gameColours then
-            fail $ show moveColour ++ " is an invalid colour."
-        else do
-            string " at "
-            (x,y) <- parseCoords
-            if x < 0 || x >= width oldGrid || y < 0 || y >= height oldGrid then
-                fail $ "Move at " ++ show (x,y) ++ " is invalid as it is out of bounds."
-            else if oldRep Map.! (x,y) /= Empty then
-                fail $ "Move at " ++ show (x,y) ++ " is invalid as this cell is already filled."
-            else if any ((== (Just $ Filled moveColour)) . (oldRep Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)] then
-                fail $ "Move at " ++ show (x,y) ++ " is invalid as an adjacent cell already has this colour."
-            else do
-                string "."
-                pure $ oldRecord {grids = grids oldRecord ++ [oldGrid {rep = Map.adjust (const $ Filled moveColour) (x,y) oldRep}]}
 
 parseCoords :: Parser (Int, Int)
 parseCoords = do
