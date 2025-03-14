@@ -13,6 +13,7 @@ dependencies:
 - ansi-terminal
 - pretty-simple
 - mtl
+- optparse-applicative
 
 ghc-options:
 - -Wall

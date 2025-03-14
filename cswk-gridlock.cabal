@@ -32,6 +32,7 @@ library
     , containers
     , megaparsec
     , mtl
+    , optparse-applicative
     , parser-combinators
     , pretty-simple
   default-language: GHC2021
@@ -52,6 +53,7 @@ executable cswk-gridlock
     , cswk-gridlock
     , megaparsec
     , mtl
+    , optparse-applicative
     , parser-combinators
     , pretty-simple
   default-language: GHC2021
@@ -78,6 +80,7 @@ test-suite cswk-gridlock-test
     , filepath
     , megaparsec
     , mtl
+    , optparse-applicative
     , parser-combinators
     , pretty-simple
     , random
