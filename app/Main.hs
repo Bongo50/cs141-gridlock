@@ -4,8 +4,9 @@ import Gridlock.DrawGrid ( drawGrid )
 import Gridlock.Parser ( parseGame )
 import Gridlock.Types ( GameRecord(grids, players) )
 import System.Environment ( getArgs )
-import Text.Megaparsec ( runParser, errorBundlePretty )
+import Text.Megaparsec ( runParserT, errorBundlePretty )
 import Data.Foldable ( traverse_ )
+import Control.Monad.State.Lazy ( evalState )
 
 main :: IO ()
 main = do
@@ -16,7 +17,7 @@ main = do
             fContents <- readFile f
             putStrLn $ "Displaying " ++ f ++ ":"
 
-            case runParser parseGame "" fContents of
+            case evalState (runParserT parseGame "" fContents) [] of
                 Left e -> putStrLn $ errorBundlePretty e
                 Right record -> do
                     {-  The following will throw an error if the grids record list is empty. However, this cannot occur as

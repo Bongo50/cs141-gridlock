@@ -2,6 +2,7 @@ module Gridlock.Types where
 
 import Data.Map (Map)
 import Data.Set (Set)
+import Data.Char (toLower)
 
 --------------------------------------------------------------------------------
 
@@ -34,6 +35,9 @@ data Cell = Empty | Filled Colour
 -- | The set of colours is fixed in advance and corresponds to the six ANSI base terminal colours (white and black excluded).
 data Colour = Red | Green | Yellow | Blue | Magenta | Cyan
     deriving (Eq, Ord, Bounded, Enum, Read, Show)
+
+displayColour :: Colour -> String
+displayColour = map toLower . show
 
 -- | A GameRecord is a complete record of a full game.
 data GameRecord = GameRecord
