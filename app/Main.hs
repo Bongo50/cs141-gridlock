@@ -4,8 +4,8 @@ import Gridlock.DrawGrid ( drawGrid )
 import Gridlock.Parser ( parseGameStrict, parseGameLoose )
 import Gridlock.Types ( GameRecord(grids, players), emptyRecord )
 import Text.Megaparsec ( runParserT, errorBundlePretty )
-import Data.Foldable ( traverse_ )
-import Control.Monad.State.Lazy ( evalState )
+import Control.Monad.State.Lazy ( evalStateT )
+import Control.Monad.Tardis ( evalTardis, noState )
 
 import Options.Applicative hiding (Parser)
 import qualified Options.Applicative as Opt
@@ -39,12 +39,12 @@ main :: IO ()
 main = do
     args <- execParser opts
 
-    let parserToUse = if strict args then parseGameStrict else parseGameLoose
-
     fContents <- readFile $ filename args 
     putStrLn $ "Displaying " ++ filename args ++ ":"
 
-    case evalState (runParserT parserToUse "" fContents) emptyRecord of
+    let parserToUse = if strict args then parseGameStrict else parseGameLoose
+
+    case evalTardis (evalStateT (runParserT parserToUse "" fContents) emptyRecord) ((0,0),(0,0)) of
         Left e -> putStrLn $ errorBundlePretty e
         Right record -> do
             {-  The following will throw an error if the @grids record@ list is empty. However, this cannot occur as

@@ -9,8 +9,9 @@ import Text.Megaparsec.Char ( string, newline, alphaNumChar, char )
 import Text.Megaparsec.Char.Lexer ( decimal )
 
 import Control.Monad.State.Lazy
-    ( MonadState(put, get), MonadTrans(lift), State )
-    
+    ( MonadState(put, get), MonadTrans(lift), State, StateT )
+
+import Control.Monad.Tardis
 
 import qualified Data.Map as Map
 
@@ -25,15 +26,12 @@ import Gridlock.Types
       Grid(Grid, rep, width, height),
       Player, displayColour )
 
-type StatefulParser = ParsecT Void String (State GameRecord)
+type TardisStateParser = ParsecT Void String (StateT GameRecord (Tardis (Int, Int) (Int, Int)))
 
-{- | Parse a game into a @GameRecord@.
+tLift :: Tardis (Int, Int) (Int, Int) a -> ParsecT Void String (StateT GameRecord (Tardis (Int, Int) (Int, Int))) a
+tLift = lift . lift
 
-To run this function (either as part of your application, or for testing, you
-can use one of the @parse*@ functions from the Megaparsec library, such as
-"@parse@" or "@parseTest@".)
--}
-parseGameStrict :: StatefulParser GameRecord
+parseGameStrict :: TardisStateParser GameRecord
 parseGameStrict = do
     string "GRIDLOCK"
     some newline
@@ -65,13 +63,16 @@ parseGameStrict = do
         string $ winner ++ " wins!"
         pure finalRecord
 
-parseGameLoose :: StatefulParser GameRecord
+parseGameLoose :: TardisStateParser GameRecord
 parseGameLoose = do
     optional $ string "GRIDLOCK"
     many newline
     optional parsePlayers
     many newline
-    (width, height) <- parseSize
+    maybeWidthHeight <- optional parseSize
+    (width, height) <- case maybeWidthHeight of
+        Just (x,y) -> pure (x, y)
+        Nothing -> tLift getFuture
     many newline
     optional parseColours
     many newline
@@ -84,6 +85,9 @@ parseGameLoose = do
 
     many $ try parseMoveLoose
 
+    (bigX, bigY) <- tLift getPast
+    tLift $ sendPast (bigX, bigY)
+
     finalRecord <- get
     --fail $ show finalRecord
     let finalGrids = grids finalRecord
@@ -92,15 +96,15 @@ parseGameLoose = do
 
     let winner = finalPlayers !! (length finalGrids `mod` 2)
     let loser = finalPlayers !! ((length finalGrids + 1) `mod` 2)
-    string $ loser ++ " cannot move."
+    optional $ string $ loser ++ " cannot move."
     if canMove finalColours $ last finalGrids then
         fail $ "Invalid loss as " ++ loser ++ " can move."
     else do
-        some newline
-        string $ winner ++ " wins!"
+        optional $ some newline
+        optional $ string $ winner ++ " wins!"
         pure finalRecord
 
-parseMoveLoose :: StatefulParser Grid
+parseMoveLoose :: TardisStateParser Grid
 parseMoveLoose = do
     oldRecord <- get
     let prevGrids = reverse $ grids oldRecord
@@ -125,6 +129,7 @@ parseMoveLoose = do
 
         string " at "
         (x,y) <- parseCoords
+        tLift $ modifyForwards (\(x',y') -> (max x' x, max y' y))
         if x < 0 || x >= width oldGrid || y < 0 || y >= height oldGrid then
             fail $ "Move at " ++ show (x,y) ++ " is invalid as it is out of bounds."
         else if oldRep Map.! (x,y) /= Empty then
@@ -138,22 +143,22 @@ parseMoveLoose = do
                 { players = gamePlayers
                 , grids = reverse $ newGrid : prevGrids
                 , colours = gameColours }
-            some newline
+            many newline
             pure newGrid
     where
-        parseColour :: Colour -> StatefulParser Colour
+        parseColour :: Colour -> TardisStateParser Colour
         parseColour c = string (displayColour c) >> pure c
 
-        parseCoords :: StatefulParser (Int, Int)
+        parseCoords :: TardisStateParser (Int, Int)
         parseCoords = do
             char '('
             x <- decimal
             char ','
             y <- decimal
             char ')'
-            lift $ pure (x,y)
+            pure (x,y)
 
-parseMoveStrict :: StatefulParser Grid
+parseMoveStrict :: TardisStateParser Grid
 parseMoveStrict = do
     oldRecord <- get
     let prevGrids = reverse $ grids oldRecord
@@ -180,19 +185,19 @@ parseMoveStrict = do
         some newline
         pure newGrid
     where
-        parseColour :: Colour -> StatefulParser Colour
+        parseColour :: Colour -> TardisStateParser Colour
         parseColour c = string (displayColour c) >> pure c
 
-        parseCoords :: StatefulParser (Int, Int)
+        parseCoords :: TardisStateParser (Int, Int)
         parseCoords = do
             char '('
             x <- decimal
             char ','
             y <- decimal
             char ')'
-            lift $ pure (x,y)
+            pure (x,y)
 
-parsePlayers :: StatefulParser [Player]
+parsePlayers :: TardisStateParser [Player]
 parsePlayers = do
     string "Players: "
     p1 <- manyTill alphaNumChar $ char ','
@@ -202,7 +207,7 @@ parsePlayers = do
     put oldRecord { players = [p1,p2] }
     pure [p1, p2]
 
-parseSize :: StatefulParser (Int, Int)
+parseSize :: TardisStateParser (Int, Int)
 parseSize = do
     string "Grid: "
     w <- decimal
@@ -211,7 +216,7 @@ parseSize = do
     char '.'
     pure (w, h)
 
-parseColours :: StatefulParser (Set Colour)
+parseColours :: TardisStateParser (Set Colour)
 parseColours = do
     string "Colours: "
     c1 <- colour
@@ -226,7 +231,7 @@ parseColours = do
     pure coloursSet
 
     where
-        colour :: StatefulParser Colour
+        colour :: TardisStateParser Colour
         colour = choice
             [ string "red" >> pure Red
             , string "green" >> pure Green
