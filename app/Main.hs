@@ -1,9 +1,8 @@
 -- This is the main entry point for your Gridlock application.
 
 import Gridlock.DrawGrid ( drawGrid )
-import Gridlock.Parser ( parseGame )
-import Gridlock.Types ( GameRecord(grids, players) )
-import System.Environment ( getArgs )
+import Gridlock.Parser ( parseGameStrict, parseGameLoose )
+import Gridlock.Types ( GameRecord(grids, players), emptyRecord )
 import Text.Megaparsec ( runParserT, errorBundlePretty )
 import Data.Foldable ( traverse_ )
 import Control.Monad.State.Lazy ( evalState )
@@ -40,20 +39,23 @@ main :: IO ()
 main = do
     args <- execParser opts
 
+    let parserToUse = if strict args then parseGameStrict else parseGameLoose
+
     fContents <- readFile $ filename args 
     putStrLn $ "Displaying " ++ filename args ++ ":"
 
-    case evalState (runParserT parseGame "" fContents) [] of
+    case evalState (runParserT parserToUse "" fContents) emptyRecord of
         Left e -> putStrLn $ errorBundlePretty e
         Right record -> do
-            {-  The following will throw an error if the grids record list is empty. However, this cannot occur as
-                every GameRecord, even one for a 0x0 game, will start with an empty grid so there will always be
-                at least one item (the empty grid) in the grids record list. -}
+            {-  The following will throw an error if the @grids record@ list is empty. However, this cannot occur as
+                every @GameRecord@, even one for a 0x0 game, will start with an empty @Grid@ so there will always be
+                at least one item (the empty @Grid@) in the @grids record@ list. -}
             let startingGrid = head $ grids record
             let otherGrids = tail $ grids record
 
             putStrLn $ drawGrid startingGrid
-            mapM_ (\(p,g) -> putStrLn (p ++ " plays:") >> putStrLn (drawGrid g)) (zip (cycle $ players record) otherGrids)
+            mapM_ (\(p,g) -> putStrLn "" >> putStrLn (p ++ " plays:") >> putStrLn (drawGrid g)) (zip (cycle $ players record) otherGrids)
 
+            putStrLn ""
             putStrLn $ (players record !! (length otherGrids `mod` 2)) ++ " can't move."
             putStrLn $ (players record !! ((length otherGrids + 1) `mod` 2)) ++ " wins!"

@@ -38,6 +38,7 @@ import Control.Monad (forM)
 import Data.List (isSuffixOf, sort)
 import System.Directory.Internal.Prelude (getArgs)
 import Text.Megaparsec
+import Control.Monad.State.Lazy ( evalState )
 
 main :: IO ()
 main = do
@@ -60,7 +61,7 @@ genExpected = do
         let fullPath = "examples/parsing/pass/" ++ fp
         let expectedPath = dropExtension fullPath <> ".expected"
         input <- readFile fullPath
-        case parse parseGame fp input of
+        case evalState (runParserT parseGameStrict fp input) emptyRecord of
             Left err -> do
                 putStrLn $ "Parse error: " ++ errorBundlePretty err
             Right res -> do
@@ -81,10 +82,10 @@ runTests = do
                 if hasExpected
                     then do
                         shouldBe <- read <$> readFile expectedPath
-                        case parse parseGame fp input of
+                        case evalState (runParserT parseGameStrict fp input) emptyRecord of
                             Left err -> assertFailure $ "Parse error: " ++ errorBundlePretty err
                             Right res -> res @?= shouldBe
-                    else case parse parseGame fp input of
+                    else case evalState (runParserT parseGameStrict fp input) emptyRecord of
                         Left err -> assertFailure $ "Parse error: " ++ errorBundlePretty err
                         Right _ -> pure () -- Assume all good
         return test
@@ -95,7 +96,7 @@ runTests = do
         let fullPath = "examples/parsing/fail/" ++ fp
         let test = testCase fp do
                 input <- readFile fullPath
-                case parse parseGame fp input of
+                case evalState (runParserT parseGameStrict fp input) emptyRecord of
                     Left _ -> return ()
                     Right res ->
                         assertFailure $

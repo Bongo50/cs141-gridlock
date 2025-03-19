@@ -1,7 +1,7 @@
 module Gridlock.Types where
 
 import Data.Map (Map)
-import Data.Set (Set)
+import Data.Set (Set, empty)
 import Data.Char (toLower)
 
 --------------------------------------------------------------------------------
@@ -49,3 +49,9 @@ data GameRecord = GameRecord
     -- ^ The list of colours in the game.
     }
     deriving (Eq, Ord, Read, Show)
+
+emptyRecord :: GameRecord
+emptyRecord = GameRecord
+    { players = []
+    , grids = []
+    , colours = empty }
