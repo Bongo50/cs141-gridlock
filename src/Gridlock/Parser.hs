@@ -47,7 +47,7 @@ parseGameStrict = do
         , height = height
         , rep = Map.fromList $ [((x,y), Empty) | x <- [0 .. width-1], y <- [0 .. height-1]] }]}
 
-    many $ try parseMoveStrict
+    many $ try parseMove
 
     finalRecord <- get
     let finalGrids = grids finalRecord
@@ -85,7 +85,7 @@ parseGameAmbiguous = do
         , height = height
         , rep = Map.fromList $ [((x,y), Empty) | x <- [0 .. width-1], y <- [0 .. height-1]] }]}
 
-    many $ try parseMoveAmbiguous
+    many $ try parseMove
 
     finalRecord <- get
     --fail $ show finalRecord
@@ -104,8 +104,8 @@ parseGameAmbiguous = do
         optional $ string $ winner ++ " wins!"
         pure finalRecord
 
-parseMoveAmbiguous :: StatefulParser Grid
-parseMoveAmbiguous = do
+parseMove :: StatefulParser Grid
+parseMove = do
     oldRecord <- get
     let prevGrids = reverse $ grids oldRecord
     let oldGrid = head prevGrids
@@ -145,45 +145,6 @@ parseMoveAmbiguous = do
             optional $ char ' '
             many newline
             pure newGrid
-    where
-        parseColour :: Colour -> StatefulParser Colour
-        parseColour c = string (displayColour c) >> pure c
-
-        parseCoords :: StatefulParser (Int, Int)
-        parseCoords = do
-            char '('
-            x <- decimal
-            char ','
-            y <- decimal
-            char ')'
-            lift $ pure (x,y)
-
-parseMoveStrict :: StatefulParser Grid
-parseMoveStrict = do
-    oldRecord <- get
-    let prevGrids = reverse $ grids oldRecord
-    let oldGrid = head prevGrids
-    let oldRep = rep oldGrid
-    let gamePlayers = players oldRecord
-    let gameColours = colours oldRecord
-    let playerToPlay = gamePlayers !! ((length prevGrids + 1) `mod` 2)
-    string playerToPlay
-    string " plays "
-    moveColour <- choice $ map parseColour $ Set.toList gameColours
-    string " at "
-    (x,y) <- parseCoords
-    if x < 0 || x >= width oldGrid || y < 0 || y >= height oldGrid then
-        fail $ "Move at " ++ show (x,y) ++ " is invalid as it is out of bounds."
-    else if oldRep Map.! (x,y) /= Empty then
-        fail $ "Move at " ++ show (x,y) ++ " is invalid as this cell is already filled."
-    else if any ((== (Just $ Filled moveColour)) . (oldRep Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)] then
-        fail $ "Move at " ++ show (x,y) ++ " is invalid as an adjacent cell already has this colour."
-    else do
-        string "."
-        let newGrid = oldGrid {rep = Map.adjust (const $ Filled moveColour) (x,y) oldRep}
-        put $ oldRecord { grids = reverse $ newGrid : prevGrids }
-        some newline
-        pure newGrid
     where
         parseColour :: Colour -> StatefulParser Colour
         parseColour c = string (displayColour c) >> pure c
