@@ -34,7 +34,6 @@ opts = info (handleArgs <**> helper)
   <> progDesc "Parse and display Gridlock games from .gridlock files"
   <> header "Gridlock Helper" )
 
-
 main :: IO ()
 main = do
     args <- execParser opts

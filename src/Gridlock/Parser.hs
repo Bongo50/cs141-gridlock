@@ -27,11 +27,8 @@ import Gridlock.Types
 
 type StatefulParser = ParsecT Void String (State GameRecord)
 
-{- | Parse a game into a @GameRecord@.
-
-To run this function (either as part of your application, or for testing, you
-can use one of the @parse*@ functions from the Megaparsec library, such as
-"@parse@" or "@parseTest@".)
+{- | Parse a .gridlock file into a @GameRecord@ strictly, exactly following the syntax in the
+    coursework spec. 
 -}
 parseGameStrict :: StatefulParser GameRecord
 parseGameStrict = do
@@ -65,6 +62,9 @@ parseGameStrict = do
         string $ winner ++ " wins!"
         pure finalRecord
 
+{- | Parse a .gridlock file into a @GameRecord@ non-strictly, handling ambiguous files that miss
+    some information by assuming the simplest case.
+-}
 parseGameAmbiguous :: StatefulParser GameRecord
 parseGameAmbiguous = do
     optional $ string "GRIDLOCK"
