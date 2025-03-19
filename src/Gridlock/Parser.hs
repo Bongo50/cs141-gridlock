@@ -65,15 +65,18 @@ parseGameStrict = do
         string $ winner ++ " wins!"
         pure finalRecord
 
-parseGameLoose :: StatefulParser GameRecord
-parseGameLoose = do
+parseGameAmbiguous :: StatefulParser GameRecord
+parseGameAmbiguous = do
     optional $ string "GRIDLOCK"
     many newline
     optional parsePlayers
+    optional $ char ' '
     many newline
     (width, height) <- parseSize
+    optional $ char ' '
     many newline
     optional parseColours
+    optional $ char ' '
     many newline
 
     oldRecord <- get
@@ -82,7 +85,7 @@ parseGameLoose = do
         , height = height
         , rep = Map.fromList $ [((x,y), Empty) | x <- [0 .. width-1], y <- [0 .. height-1]] }]}
 
-    many $ try parseMoveLoose
+    many $ try parseMoveAmbiguous
 
     finalRecord <- get
     --fail $ show finalRecord
@@ -92,16 +95,17 @@ parseGameLoose = do
 
     let winner = finalPlayers !! (length finalGrids `mod` 2)
     let loser = finalPlayers !! ((length finalGrids + 1) `mod` 2)
-    string $ loser ++ " cannot move."
+    optional $ string $ loser ++ " cannot move."
     if canMove finalColours $ last finalGrids then
         fail $ "Invalid loss as " ++ loser ++ " can move."
     else do
-        some newline
-        string $ winner ++ " wins!"
+        optional $ char ' '
+        many newline
+        optional $ string $ winner ++ " wins!"
         pure finalRecord
 
-parseMoveLoose :: StatefulParser Grid
-parseMoveLoose = do
+parseMoveAmbiguous :: StatefulParser Grid
+parseMoveAmbiguous = do
     oldRecord <- get
     let prevGrids = reverse $ grids oldRecord
     let oldGrid = head prevGrids
@@ -138,7 +142,8 @@ parseMoveLoose = do
                 { players = gamePlayers
                 , grids = reverse $ newGrid : prevGrids
                 , colours = gameColours }
-            some newline
+            optional $ char ' '
+            many newline
             pure newGrid
     where
         parseColour :: Colour -> StatefulParser Colour

@@ -1,7 +1,7 @@
 -- This is the main entry point for your Gridlock application.
 
 import Gridlock.DrawGrid ( drawGrid )
-import Gridlock.Parser ( parseGameStrict, parseGameLoose )
+import Gridlock.Parser ( parseGameStrict, parseGameAmbiguous )
 import Gridlock.Types ( GameRecord(grids, players), emptyRecord )
 import Text.Megaparsec ( runParserT, errorBundlePretty )
 import Data.Foldable ( traverse_ )
@@ -13,7 +13,7 @@ import qualified Options.Applicative as Opt
 -- https://hackage.haskell.org/package/optparse-applicative-0.18.1.0#readme
 data RuntimeArgs = RuntimeArgs 
     { filename      :: String 
-    , strict        :: Bool }
+    , ambiguous     :: Bool }
 
 handleArgs :: Opt.Parser RuntimeArgs
 handleArgs = RuntimeArgs
@@ -24,9 +24,9 @@ handleArgs = RuntimeArgs
          <> metavar "FILENAME"
          <> help "Filename to read to/save from" )
       <*> switch
-          ( long "strict"
-         <> short 's'
-         <> help "Whether to parse strictly" )
+          ( long "ambiguous"
+         <> short 'a'
+         <> help "Whether to allow less strict, potentially ambiguous, parsing" )
 
 opts :: ParserInfo RuntimeArgs
 opts = info (handleArgs <**> helper)
@@ -39,7 +39,7 @@ main :: IO ()
 main = do
     args <- execParser opts
 
-    let parserToUse = if strict args then parseGameStrict else parseGameLoose
+    let parserToUse = if ambiguous args then parseGameAmbiguous else parseGameStrict
 
     fContents <- readFile $ filename args 
     putStrLn $ "Displaying " ++ filename args ++ ":"
