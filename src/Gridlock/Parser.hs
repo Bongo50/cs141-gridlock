@@ -3,8 +3,8 @@
 {-# HLINT ignore "Redundant pure" #-}
 module Gridlock.Parser where
 
-import Text.Megaparsec ( MonadParsec(try), ParsecT, manyTill, choice, (<|>), many, some, optional )
-import Text.Megaparsec.Char ( string, newline, alphaNumChar, char, space, space1 )
+import Text.Megaparsec ( MonadParsec(try, lookAhead), ParsecT, manyTill, choice, (<|>), many, some, optional, manyTill, eof, lookAhead )
+import Text.Megaparsec.Char ( string, newline, alphaNumChar, char, space, space1, hspace )
 import Text.Megaparsec.Char.Lexer ( decimal )
 import Control.Monad.State.Lazy ( MonadState(put, get), modify, MonadTrans(lift), State )
 import Control.Monad ( void, when, unless )
@@ -34,7 +34,7 @@ addPlayer p = modify (\gr -> gr {players = players gr ++ [p]})
 addColour :: Colour -> State GameRecord ()
 addColour c = modify (\gr -> gr {colours = Set.insert c $ colours gr})
 
-{- | Parse a .gridlock file into a @GameRecord@. If the Boolean argument is @False@, this will be
+{- | Parse a .gridlock file into a @GameRecord@. If the Boolean parameter is @False@, this will be
     done strictly, exactly following the syntax in the coursework spec. Otherwise, more freedom
     in the syntax and room for ambiguity (hence the parameter name) is allowed.
 -}
@@ -49,9 +49,9 @@ parseGame ambiguity = do
     whitespace
     optionality $ parsePlayers ambiguity
     whitespace
-    (width, height) <- parseSize
+    (width, height) <- parseSize ambiguity
     whitespace
-    optionality parseColours
+    optionality $ parseColours ambiguity
     whitespace
 
     {-  @parseGameStrict@ should be evaluated with @emptyRecord@ as its initial state. This state
@@ -61,21 +61,9 @@ parseGame ambiguity = do
             , height = height
             , rep = Map.fromList $ [((x,y), Empty) | x <- [0 .. width-1], y <- [0 .. height-1]]
             }
-    
-    let rParseMove = do
-        get >>= \record -> do
-            player <- manyTill alphaNumChar $  string " plays "
-            when (length (players record) < 2) $ lift $ addPlayer player -- When parsing strictly, @length (players record) == 2@ already so this doesn't triger.
 
-            -- Validate that the player's name is valid and that it is this player's turn.
-            newRecord <- get
-            unless (player `elem` players newRecord) $ fail $ player ++ " is not a valid player."
-            unless (getPlayerInNMoves 1 newRecord == player) $ fail $ player ++ " is playing out of turn."
-            -- Note: the second case should cover the first, but the first is included to produce a better error message.
-
-    {-  Parse 0 or more lines containing moves. @try@ is necessary so that the tokens consumed on
-        the first line that fails are given back. -}
-    many $ try $ parseMove ambiguity
+    {-  Parse lines describing moves until "cannot move" or "wins!" lines are reached, or the file ends. -}
+    manyTill (parseMove ambiguity) (try $ choice [void $ lookAhead $ manyTill alphaNumChar $ string " cannot move", void $ lookAhead $ manyTill alphaNumChar $ string " wins!", lookAhead eof])
 
     {-  Deal with the possibility that the current stateful @GameRecord@ might not contain both players'
         names, filling it in with dummy names as required. -}
@@ -105,7 +93,7 @@ parseGame ambiguity = do
         pure finalRecord
 
 {- | Parse a line of text describing a Gridlock move, verifying that it is a valid move. If the 
-    Boolean argument is @False@, this will be done strictly, exactly following the syntax in the
+    Boolean parameter is @False@, this will be done strictly, exactly following the syntax in the
     coursework spec. Otherwise, more freedom in the syntax and room for ambiguity (hence the
     parameter name) is allowed.
 -}
@@ -113,14 +101,19 @@ parseMove :: Bool -> StatefulParser ()
 parseMove ambiguity = do
     -- Parse the name and validate that it is valid.
     get >>= \record -> do
-        player <- manyTill alphaNumChar $  string " plays "
-        when (length (players record) < 2) $ lift $ addPlayer player -- When parsing strictly, @length (players record) == 2@ already so this doesn't triger.
+        player <- manyTill alphaNumChar $ lookAhead $ string " plays "
+        {-  Add the player to the stateful @GameRecord@ if there are less than two recorded players and the player is
+            not already recorded. When parsing strictly, @length (players record) == 2@ already so this doesn't triger. -}
+        when (length (players record) < 2) $ unless (player `elem` players record) $ lift $ addPlayer player
+
 
         -- Validate that the player's name is valid and that it is this player's turn.
         newRecord <- get
         unless (player `elem` players newRecord) $ fail $ player ++ " is not a valid player."
-        unless (getPlayerInNMoves 1 newRecord == player) $ fail $ player ++ " is playing out of turn."
+        unless (getPlayerInNMoves 1 newRecord == player) $ fail $ player ++ " is playing out of turn. It is " ++ getPlayerInNMoves 1 newRecord ++ "'s turn."
         -- Note: the second case should cover the first, but the first is included to produce a better error message.
+
+    string " plays "
 
     -- Parse the move's colour, verifying that it is a valid colour if doing so strictly. 
     moveColour <- get >>= \record -> choice $ map parseColour (if ambiguity then [Red .. Cyan] else Set.toList $ colours record)
@@ -145,7 +138,7 @@ parseMove ambiguity = do
             -- ^ Test every surrounding cell to see if it has the colour of the current move.
             fail $ "Move at " ++ show (x,y) ++ " is invalid as an adjacent cell already has this colour."
         else do
-            (if ambiguity then optional else fmap Just) $ string "." -- Require a full stop when parsing strictly.
+            (if ambiguity then optional else fmap Just) $ char '.' -- Require a full stop when parsing strictly.
 
             -- Record the move in the stateful @GameRecord@.
             lift $ addGrid $ lastGrid {rep = Map.adjust (const $ Filled moveColour) (x,y) lastGridRep}
@@ -161,55 +154,76 @@ parseMove ambiguity = do
             char ')'
             pure (x,y)
 
+{- | @parsePlayers@ parses the names of the players when they're declared at the top of a .gridlock file. 
+    If the Boolean parameter is False, this will be done strictly, requiring two names to be specified as
+    in the coursework spec. Otherwise, this is done non-strictly, allowing only a single name to be listed,
+    and for arbitrary horizontal whitespace in between the two names if two names are listed. -}
 parsePlayers :: Bool -> StatefulParser ()
 parsePlayers ambiguity = do
-    string "Players: "
+    string "Players:"
     if ambiguity then
         choice
             [ try $ do
+                hspace
                 p1 <- manyTill alphaNumChar $ char ','
-                char ' '
+                hspace
                 p2 <- manyTill alphaNumChar (space1 <|> void (char '.'))
                 lift $ addPlayer p1
                 lift $ addPlayer p2
             , do
+                hspace
                 p <- manyTill alphaNumChar (space1 <|> void (char '.'))
                 lift $ addPlayer p
             ]
     else do
+        char ' '
         p1 <- manyTill alphaNumChar $ char ','
         char ' '
         p2 <- manyTill alphaNumChar $ char '.'
         lift $ addPlayer p1
         lift $ addPlayer p2
 
-parseSize :: StatefulParser (Int, Int)
-parseSize = do
-    string "Grid: "
+{- | @parseSize@ parses the size of the grid when it is defined at the top of a .gridlock file. 
+    If the Boolean parameter is False, this will be done strictly, requiring the exact spacing
+    and full stop set out in the coursework spec. Otherwise, leeway is allowed here. -}
+parseSize :: Bool -> StatefulParser (Int, Int)
+parseSize ambiguity = do
+    string "Grid:"
+    if ambiguity then hspace else void $ char ' '
     w <- decimal
+    when ambiguity hspace
     char 'x'
+    when ambiguity hspace
     h <- decimal
-    char '.'
+    (if ambiguity then optional else fmap Just) $ char '.'
     pure (w, h)
 
-parseColours :: StatefulParser (Set Colour)
-parseColours = do
-    string "Colours: "
+{- | @parseColours@ parses the colours defined at the top of a .gridlock file. If the Boolean parameter
+    is False, this will be done strictly, requiring the exact spacing and full stop set out in the
+    coursework spec. Otherwise, leeway is allowed here. -}
+parseColours :: Bool -> StatefulParser ()
+parseColours ambiguity = do
+    string "Colours:"
+    if ambiguity then hspace else void $ char ' '
+    -- Handle the first colour separately as it doesn't have a proceeding comma.
     c1 <- colour
     colours <- many $ do
-        string ", "
+        char ','
+        if ambiguity then hspace else void $ char ' '
         colour
-    char '.'
+    (if ambiguity then optional else fmap Just) $ char '.'
 
     let coloursSet = Set.fromList $ c1 : colours
     oldRecord <- get
     put oldRecord { colours = coloursSet }
-    pure coloursSet
 
     where
+        -- | Matches to any @Colour@'s lower-case string representation, returning that @Colour@.
         colour :: StatefulParser Colour
         colour = choice $ map parseColour [Red .. Cyan]
 
+{- | Used in @parseMove@ and @parseColours@, @parseColour@ takes a colour, matches to its lower-case
+    @String@ representation and returns the colour. -}
 parseColour :: Colour -> StatefulParser Colour
 parseColour c = string (displayColour c) >> pure c
 

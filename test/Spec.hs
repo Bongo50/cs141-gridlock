@@ -60,7 +60,7 @@ genExpected = do
         let fullPath = "examples/parsing/pass/" ++ fp
         let expectedPath = dropExtension fullPath <> ".expected"
         input <- readFile fullPath
-        case evalState (runParserT (parseGame True) fp input) emptyRecord of
+        case evalState (runParserT (parseGame False) fp input) emptyRecord of
             Left err -> do
                 putStrLn $ "Parse error: " ++ errorBundlePretty err
             Right res -> do
@@ -81,10 +81,10 @@ runTests = do
                 if hasExpected
                     then do
                         shouldBe <- read <$> readFile expectedPath
-                        case evalState (runParserT (parseGame True) fp input) emptyRecord of
+                        case evalState (runParserT (parseGame False) fp input) emptyRecord of
                             Left err -> assertFailure $ "Parse error: " ++ errorBundlePretty err
                             Right res -> res @?= shouldBe
-                    else case evalState (runParserT (parseGame True) fp input) emptyRecord of
+                    else case evalState (runParserT (parseGame False) fp input) emptyRecord of
                         Left err -> assertFailure $ "Parse error: " ++ errorBundlePretty err
                         Right _ -> pure () -- Assume all good
         return test
@@ -95,7 +95,7 @@ runTests = do
         let fullPath = "examples/parsing/fail/" ++ fp
         let test = testCase fp do
                 input <- readFile fullPath
-                case evalState (runParserT (parseGame True) fp input) emptyRecord of
+                case evalState (runParserT (parseGame False) fp input) emptyRecord of
                     Left _ -> return ()
                     Right res ->
                         assertFailure $
