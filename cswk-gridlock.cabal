@@ -19,6 +19,7 @@ library
       Gridlock.DrawGrid
       Gridlock.Parser
       Gridlock.Types
+      Gridlock.Utils
   other-modules:
       Paths_cswk_gridlock
   hs-source-dirs:

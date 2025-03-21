@@ -29,7 +29,9 @@ ghc-options:
 
 language: GHC2021
 
-default-extensions: LambdaCase
+default-extensions: 
+- LambdaCase
+- RecursiveDo
 
 library:
   source-dirs:

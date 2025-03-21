@@ -9,7 +9,7 @@ tests and property tests (respectively) are written.
 {-# OPTIONS_GHC -Wno-all #-}
 
 import Data.Function (on)
-import Data.List (findIndex, inits, isInfixOf, nub)
+import Data.List ( findIndex, inits, isInfixOf, nub, isSuffixOf, sort )
 import Data.Tuple (swap)
 import System.Console.ANSI as ANSI hiding (Color (..))
 import qualified System.Console.ANSI as ANSI
@@ -35,7 +35,6 @@ import Gridlock.Parser
 import Gridlock.Types
 
 import Control.Monad (forM)
-import Data.List (isSuffixOf, sort)
 import System.Directory.Internal.Prelude (getArgs)
 import Text.Megaparsec
 import Control.Monad.State.Lazy ( evalState )
@@ -61,7 +60,7 @@ genExpected = do
         let fullPath = "examples/parsing/pass/" ++ fp
         let expectedPath = dropExtension fullPath <> ".expected"
         input <- readFile fullPath
-        case evalState (runParserT parseGameStrict fp input) emptyRecord of
+        case evalState (runParserT (parseGame True) fp input) emptyRecord of
             Left err -> do
                 putStrLn $ "Parse error: " ++ errorBundlePretty err
             Right res -> do
@@ -82,10 +81,10 @@ runTests = do
                 if hasExpected
                     then do
                         shouldBe <- read <$> readFile expectedPath
-                        case evalState (runParserT parseGameStrict fp input) emptyRecord of
+                        case evalState (runParserT (parseGame True) fp input) emptyRecord of
                             Left err -> assertFailure $ "Parse error: " ++ errorBundlePretty err
                             Right res -> res @?= shouldBe
-                    else case evalState (runParserT parseGameStrict fp input) emptyRecord of
+                    else case evalState (runParserT (parseGame True) fp input) emptyRecord of
                         Left err -> assertFailure $ "Parse error: " ++ errorBundlePretty err
                         Right _ -> pure () -- Assume all good
         return test
@@ -96,7 +95,7 @@ runTests = do
         let fullPath = "examples/parsing/fail/" ++ fp
         let test = testCase fp do
                 input <- readFile fullPath
-                case evalState (runParserT parseGameStrict fp input) emptyRecord of
+                case evalState (runParserT (parseGame True) fp input) emptyRecord of
                     Left _ -> return ()
                     Right res ->
                         assertFailure $
@@ -123,7 +122,7 @@ drawGridTests =
         "drawGrid tests"
         [ testCase "The empty grid renders correctly" $
             let
-                grid = Grid 0 0 $ Map.fromList []
+                grid = Grid 0 0 Map.empty
                 res = "++\n++"
              in
                 gridCase grid res

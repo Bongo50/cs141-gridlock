@@ -3,152 +3,155 @@
 {-# HLINT ignore "Redundant pure" #-}
 module Gridlock.Parser where
 
-import Text.Megaparsec
-    ( MonadParsec(try), ParsecT, manyTill, choice, many, some, optional )
-import Text.Megaparsec.Char ( string, newline, alphaNumChar, char )
+import Text.Megaparsec ( MonadParsec(try), ParsecT, manyTill, choice, (<|>), many, some, optional )
+import Text.Megaparsec.Char ( string, newline, alphaNumChar, char, space, space1 )
 import Text.Megaparsec.Char.Lexer ( decimal )
-
-import Control.Monad.State.Lazy
-    ( MonadState(put, get), MonadTrans(lift), State )
-    
-
+import Control.Monad.State.Lazy ( MonadState(put, get), modify, MonadTrans(lift), State )
+import Control.Monad ( void, when, unless )
 import qualified Data.Map as Map
-
 import Data.Set (Set)
 import qualified Data.Set as Set
-
 import Data.Void ( Void )
 import Gridlock.Types
     ( GameRecord(..),
       Colour(..),
       Cell(Filled, Empty),
       Grid(Grid, rep, width, height),
-      Player, displayColour )
+      Player, displayColour)
+import Gridlock.Utils (getPlayerInNMoves)
 
+{- | A monad stack formed of @State@ wrapped in @ParsecT@. This allows for parsing while also
+    threading a @GameRecord@ through, gradually referring to it and adding to it to produce
+    the final result -}
 type StatefulParser = ParsecT Void String (State GameRecord)
 
-{- | Parse a .gridlock file into a @GameRecord@ strictly, exactly following the syntax in the
-    coursework spec. 
+addGrid :: Grid -> State GameRecord ()
+addGrid g = modify (\gr -> gr {grids = grids gr ++ [g]})
+
+addPlayer :: Player -> State GameRecord ()
+addPlayer p = modify (\gr -> gr {players = players gr ++ [p]})
+
+addColour :: Colour -> State GameRecord ()
+addColour c = modify (\gr -> gr {colours = Set.insert c $ colours gr})
+
+{- | Parse a .gridlock file into a @GameRecord@. If the Boolean argument is @False@, this will be
+    done strictly, exactly following the syntax in the coursework spec. Otherwise, more freedom
+    in the syntax and room for ambiguity (hence the parameter name) is allowed.
 -}
-parseGameStrict :: StatefulParser GameRecord
-parseGameStrict = do
-    string "GRIDLOCK"
-    some newline
-    players <- parsePlayers
-    some newline
+parseGame :: Bool -> StatefulParser GameRecord
+parseGame ambiguity = do
+    let optionality = (if ambiguity then optional else fmap Just) :: StatefulParser a -> StatefulParser (Maybe a)
+    let whitespace = (if ambiguity then space else void $ some newline) :: StatefulParser ()
+
+    --  Parse the top of the file, extracing players, game size and colours.
+    when ambiguity space -- Allow arbitrary whitespace at the start of the file, only in ambiguous mode.
+    optionality $ string "GRIDLOCK"
+    whitespace
+    optionality $ parsePlayers ambiguity
+    whitespace
     (width, height) <- parseSize
-    some newline
-    colours <- parseColours
-    some newline
+    whitespace
+    optionality parseColours
+    whitespace
 
-    oldRecord <- get
-    put oldRecord { grids = [Grid
-        { width = width
-        , height = height
-        , rep = Map.fromList $ [((x,y), Empty) | x <- [0 .. width-1], y <- [0 .. height-1]] }]}
+    {-  @parseGameStrict@ should be evaluated with @emptyRecord@ as its initial state. This state
+        is then modified to contain an empty @Grid@. -}
+    lift $ addGrid Grid
+            { width = width
+            , height = height
+            , rep = Map.fromList $ [((x,y), Empty) | x <- [0 .. width-1], y <- [0 .. height-1]]
+            }
+    
+    let rParseMove = do
+        get >>= \record -> do
+            player <- manyTill alphaNumChar $  string " plays "
+            when (length (players record) < 2) $ lift $ addPlayer player -- When parsing strictly, @length (players record) == 2@ already so this doesn't triger.
 
-    many $ try parseMove
+            -- Validate that the player's name is valid and that it is this player's turn.
+            newRecord <- get
+            unless (player `elem` players newRecord) $ fail $ player ++ " is not a valid player."
+            unless (getPlayerInNMoves 1 newRecord == player) $ fail $ player ++ " is playing out of turn."
+            -- Note: the second case should cover the first, but the first is included to produce a better error message.
 
+    {-  Parse 0 or more lines containing moves. @try@ is necessary so that the tokens consumed on
+        the first line that fails are given back. -}
+    many $ try $ parseMove ambiguity
+
+    {-  Deal with the possibility that the current stateful @GameRecord@ might not contain both players'
+        names, filling it in with dummy names as required. -}
+    modify (\gr ->
+        let currentPlayers = players gr
+        in gr {players = case length currentPlayers of
+                0 -> ["Player 1", "Player 2"]
+                1 -> [head currentPlayers, "Player 2"]
+                _ -> currentPlayers
+            })
+
+    --  The stateful @GameRecord@ is now complete.
     finalRecord <- get
-    let finalGrids = grids finalRecord
 
-    let winner = players !! (length finalGrids `mod` 2)
-    let loser = players !! ((length finalGrids + 1) `mod` 2)
-    string $ loser ++ " cannot move."
-    if canMove colours $ last finalGrids then
+    {-  Parse the "cannot move", "wins!" lines that should be at the end of the file and check that
+        the loss is valid. -}
+    let winner = getPlayerInNMoves 0 finalRecord
+    let loser = getPlayerInNMoves 1 finalRecord
+    optionality $ string $ loser ++ " cannot move."
+    canMove <- lift checkCanMove
+    if canMove then
         fail $ "Invalid loss as " ++ loser ++ " can move."
     else do
-        some newline
-        string $ winner ++ " wins!"
+        whitespace
+        optionality $ string $ winner ++ " wins!"
+        --fail $ show finalRecord
         pure finalRecord
 
-{- | Parse a .gridlock file into a @GameRecord@ non-strictly, handling ambiguous files that miss
-    some information by assuming the simplest case.
+{- | Parse a line of text describing a Gridlock move, verifying that it is a valid move. If the 
+    Boolean argument is @False@, this will be done strictly, exactly following the syntax in the
+    coursework spec. Otherwise, more freedom in the syntax and room for ambiguity (hence the
+    parameter name) is allowed.
 -}
-parseGameAmbiguous :: StatefulParser GameRecord
-parseGameAmbiguous = do
-    optional $ string "GRIDLOCK"
-    many newline
-    optional parsePlayers
-    optional $ char ' '
-    many newline
-    (width, height) <- parseSize
-    optional $ char ' '
-    many newline
-    optional parseColours
-    optional $ char ' '
-    many newline
+parseMove :: Bool -> StatefulParser ()
+parseMove ambiguity = do
+    -- Parse the name and validate that it is valid.
+    get >>= \record -> do
+        player <- manyTill alphaNumChar $  string " plays "
+        when (length (players record) < 2) $ lift $ addPlayer player -- When parsing strictly, @length (players record) == 2@ already so this doesn't triger.
 
-    oldRecord <- get
-    put oldRecord { grids = [Grid
-        { width = width
-        , height = height
-        , rep = Map.fromList $ [((x,y), Empty) | x <- [0 .. width-1], y <- [0 .. height-1]] }]}
+        -- Validate that the player's name is valid and that it is this player's turn.
+        newRecord <- get
+        unless (player `elem` players newRecord) $ fail $ player ++ " is not a valid player."
+        unless (getPlayerInNMoves 1 newRecord == player) $ fail $ player ++ " is playing out of turn."
+        -- Note: the second case should cover the first, but the first is included to produce a better error message.
 
-    many $ try parseMove
+    -- Parse the move's colour, verifying that it is a valid colour if doing so strictly. 
+    moveColour <- get >>= \record -> choice $ map parseColour (if ambiguity then [Red .. Cyan] else Set.toList $ colours record)
+    {-  When parsing ambiguously, add the colour to the stateful @GameRecord@. As the colours are stored in a @Set@,
+        this will do nothing if the colour is already present. -}
+    when ambiguity $ lift $ addColour moveColour
 
-    finalRecord <- get
-    --fail $ show finalRecord
-    let finalGrids = grids finalRecord
-    let finalPlayers = players finalRecord
-    let finalColours = colours finalRecord
-
-    let winner = finalPlayers !! (length finalGrids `mod` 2)
-    let loser = finalPlayers !! ((length finalGrids + 1) `mod` 2)
-    optional $ string $ loser ++ " cannot move."
-    if canMove finalColours $ last finalGrids then
-        fail $ "Invalid loss as " ++ loser ++ " can move."
-    else do
-        optional $ char ' '
-        many newline
-        optional $ string $ winner ++ " wins!"
-        pure finalRecord
-
-parseMove :: StatefulParser Grid
-parseMove = do
-    oldRecord <- get
-    let prevGrids = reverse $ grids oldRecord
-    let oldGrid = head prevGrids
-    let oldRep = rep oldGrid
-    let oldPlayers = players oldRecord
-    let oldColours = colours oldRecord
-
-    player <- manyTill alphaNumChar $  string " plays "
-    let gamePlayers =
-            if length oldPlayers < 2 then
-                reverse $ player : oldPlayers
-            else oldPlayers
-    if player `notElem` gamePlayers then
-        fail $ player ++ " is not a valid player."
-    else if gamePlayers !! ((length prevGrids + 1) `mod` 2) /= player then
-        fail $ player ++ " is playing out of turn."
-    else do
-
-        moveColour <- choice $ map parseColour [Red .. Cyan]
-        let gameColours = Set.insert moveColour oldColours
+    -- Parse the move's position and verify that the resulting move is valid.
+    get >>= \record -> do
+        let lastGrid = last $ grids record
+        let lastGridRep = rep lastGrid
 
         string " at "
         (x,y) <- parseCoords
-        if x < 0 || x >= width oldGrid || y < 0 || y >= height oldGrid then
+
+        -- Verify that the move is valid and error if it isn't.
+        if x < 0 || x >= width lastGrid || y < 0 || y >= height lastGrid then
             fail $ "Move at " ++ show (x,y) ++ " is invalid as it is out of bounds."
-        else if oldRep Map.! (x,y) /= Empty then
+        else if lastGridRep Map.! (x,y) /= Empty then
             fail $ "Move at " ++ show (x,y) ++ " is invalid as this cell is already filled."
-        else if any ((== (Just $ Filled moveColour)) . (oldRep Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)] then
+        else if any ((== (Just $ Filled moveColour)) . (lastGridRep Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)] then
+            -- ^ Test every surrounding cell to see if it has the colour of the current move.
             fail $ "Move at " ++ show (x,y) ++ " is invalid as an adjacent cell already has this colour."
         else do
-            string "."
-            let newGrid = oldGrid {rep = Map.adjust (const $ Filled moveColour) (x,y) oldRep}
-            put $ GameRecord
-                { players = gamePlayers
-                , grids = reverse $ newGrid : prevGrids
-                , colours = gameColours }
-            optional $ char ' '
-            many newline
-            pure newGrid
-    where
-        parseColour :: Colour -> StatefulParser Colour
-        parseColour c = string (displayColour c) >> pure c
+            (if ambiguity then optional else fmap Just) $ string "." -- Require a full stop when parsing strictly.
 
+            -- Record the move in the stateful @GameRecord@.
+            lift $ addGrid $ lastGrid {rep = Map.adjust (const $ Filled moveColour) (x,y) lastGridRep}
+            (if ambiguity then space else void $ some newline) :: StatefulParser () -- allow arbitrary whitespace when parsing ambiguously, otherwise just newlines.
+    where
+        -- | Parse a set of coordinates written as "(x,y)".
         parseCoords :: StatefulParser (Int, Int)
         parseCoords = do
             char '('
@@ -156,17 +159,29 @@ parseMove = do
             char ','
             y <- decimal
             char ')'
-            lift $ pure (x,y)
+            pure (x,y)
 
-parsePlayers :: StatefulParser [Player]
-parsePlayers = do
+parsePlayers :: Bool -> StatefulParser ()
+parsePlayers ambiguity = do
     string "Players: "
-    p1 <- manyTill alphaNumChar $ char ','
-    char ' '
-    p2 <- manyTill alphaNumChar $ char '.'
-    oldRecord <- get
-    put oldRecord { players = [p1,p2] }
-    pure [p1, p2]
+    if ambiguity then
+        choice
+            [ try $ do
+                p1 <- manyTill alphaNumChar $ char ','
+                char ' '
+                p2 <- manyTill alphaNumChar (space1 <|> void (char '.'))
+                lift $ addPlayer p1
+                lift $ addPlayer p2
+            , do
+                p <- manyTill alphaNumChar (space1 <|> void (char '.'))
+                lift $ addPlayer p
+            ]
+    else do
+        p1 <- manyTill alphaNumChar $ char ','
+        char ' '
+        p2 <- manyTill alphaNumChar $ char '.'
+        lift $ addPlayer p1
+        lift $ addPlayer p2
 
 parseSize :: StatefulParser (Int, Int)
 parseSize = do
@@ -193,18 +208,26 @@ parseColours = do
 
     where
         colour :: StatefulParser Colour
-        colour = choice
-            [ string "red" >> pure Red
-            , string "green" >> pure Green
-            , string "yellow" >> pure Yellow
-            , string "blue" >> pure Blue
-            , string "magenta" >> pure Magenta
-            , string "cyan" >> pure Cyan
-            ]
+        colour = choice $ map parseColour [Red .. Cyan]
 
-canMove :: Set Colour -> Grid -> Bool
-canMove colours grid =
-    let
-        gridR = rep grid
-    in
-        or [ gridR Map.!? (x,y) == Just Empty && not (any ((== (Just $ Filled c)) . (gridR Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)]) | x <- [0 .. width grid - 1], y <- [0 .. height grid -1], c <- Set.toList colours]
+parseColour :: Colour -> StatefulParser Colour
+parseColour c = string (displayColour c) >> pure c
+
+{- | @checkCanMove@ looks at the @GameRecord@ currently in the state and determines whether any moves can be made from this position.
+    To do this, it checks each @Cell@ and each @Colour@, checking that the @Cell@ is empty and that there's a @Colour@ in the game not
+    currently used to fill any adjacent @Cell@. If both of these conditions are met for any cell, then there's still a move that can
+    be made and True is returned. -}
+checkCanMove :: State GameRecord Bool
+checkCanMove = do
+    record <- get
+    let cs = colours record
+    let g = last $ grids record
+    let gR = rep g
+    pure $ or [
+            gR Map.!? (x,y) == Just Empty && not ( -- check that each cell is empty and that ...
+                any ((== (Just $ Filled c)) . (gR Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)] -- ... none of the adjacent cells are filled with any colour
+                {-  Note: @(Map.!?)@ returns a @Maybe@ value. This means @Nothing@ is returned if the cell checked doesn't exist, accounting
+                    for cells on the edge of the grid that don't have the full four adjacent cells. As this will never be equal to a @Just@
+                    value, this case will be effectively handled. -}
+            ) | x <- [0 .. width g - 1], y <- [0 .. height g -1], c <- Set.toList cs -- for each cell (with coords (x,y)) and colour
+        ]
