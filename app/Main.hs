@@ -9,7 +9,7 @@ import Control.Monad.State.Lazy ( evalState )
 import Control.Monad.Reader ( runReaderT )
 import Options.Applicative ( execParser )
 
-{- | The entrypoint to the program. This function handles arguments, runs the parser and outputs the game in a human-
+{- | The entry point to the program. This function handles arguments, runs the parser and outputs the game in a human-
     readable way. -}
 main :: IO ()
 main = do
