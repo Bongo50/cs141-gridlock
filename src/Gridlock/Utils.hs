@@ -13,7 +13,7 @@ getPlayerInNMoves n GameRecord{players, grids} = players !! ((length grids + n) 
 displayColour :: Colour -> String
 displayColour = map toLower . show
 
--- An empty @GameRecord@, used when initiating the parse.
+-- An empty @GameRecord@, used when initialising the parse.
 emptyRecord :: GameRecord
 emptyRecord = GameRecord
     { players = []

@@ -14,6 +14,7 @@ import Options.Applicative ( execParser )
 main :: IO ()
 main = do
     -- Parse and handle arguments using optparse-applicative.
+    -- Record wildcards has been used here to expose all of the @RuntimeArgs@'s fields.
     RuntimeArgs{..} <- execParser programArgs
 
     -- Check the file extension.
