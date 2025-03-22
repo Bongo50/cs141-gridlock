@@ -1,5 +1,4 @@
 module Gridlock.Args where
---  https://hackage.haskell.org/package/optparse-applicative-0.18.1.0#readme
 
 import Options.Applicative
     ( (<**>),

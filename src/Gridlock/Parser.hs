@@ -128,70 +128,6 @@ parseGame = do
     else do
         pure finalRecord
 
--- | Parse a line of text describing a Gridlock move, verifying that it is a valid move. 
-parseMove :: MonadStack ()
-parseMove = do
-    {- If the Boolean value below is @False@, parsing will be done strictly, exactly following the syntax
-    in the coursework spec. Otherwise, more freedom in the syntax and room for ambiguity (hence the
-    parameter name) is allowed. -}
-    allowAmbiguity <- ask
-
-    -- Parse the name and validate that it is valid.
-    (get >>= \GameRecord{players} -> do
-        player <- manyTill alphaNumChar $ lookAhead $ string " plays "
-        {-  Add the player to the stateful @GameRecord@ if there are less than two recorded players and the player is
-            not already recorded. When parsing strictly, @length (players record) == 2@ already so this doesn't triger. -}
-        when (length players < 2) $ unless (player `elem` players) $ addPlayer player
-        pure player) >>= \player ->
-            
-        -- Validate that the player's name is valid and that it is this player's turn.
-        get >>= \record@GameRecord{players} -> do
-            unless (player `elem` players) $ fail $ player ++ " is not a valid player."
-            unless (getPlayerInNMoves 1 record == player) $ fail $ player ++ " is playing out of turn. It is " ++ getPlayerInNMoves 1 record ++ "'s turn."
-            -- Note: the second case should cover the first, but the first is included to produce a better error message.
-    -- The unconventional syntax above is so that record punning can be used on the results of both @get@s, and so @player@ can be used in both blocks.
-
-    string " plays "
-
-    -- Parse the move's colour, verifying that it is a valid colour if doing so strictly. 
-    moveColour <- get >>= \GameRecord{colours} -> choice $ map parseColour (if allowAmbiguity then [Red .. Cyan] else Set.toList colours)
-    {-  When parsing ambiguously, add the colour to the stateful @GameRecord@. As the colours are stored in a @Set@,
-        this will do nothing if the colour is already present. -}
-    when allowAmbiguity $ addColour moveColour
-
-    -- Parse the move's position and verify that the resulting move is valid.
-    get >>= \GameRecord{grids} -> do
-        -- Get the field's from the last grid with record wildcards.
-        let lastGrid@Grid{..} = last grids
-
-        string " at "
-        (x,y) <- parseCoords
-
-        -- Verify that the move is valid and error if it isn't.
-        if x < 0 || x >= width || y < 0 || y >= height then
-            fail $ "Move at " ++ show (x,y) ++ " is invalid as it is out of bounds."
-        else if rep Map.! (x,y) /= Empty then
-            fail $ "Move at " ++ show (x,y) ++ " is invalid as this cell is already filled."
-        else if any ((== (Just $ Filled moveColour)) . (rep Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)] then
-            -- ^ Test every surrounding cell to see if it has the colour of the current move.
-            fail $ "Move at " ++ show (x,y) ++ " is invalid as an adjacent cell already has this colour."
-        else do
-            (if allowAmbiguity then optional else fmap Just) $ char '.' -- Require a full stop when parsing strictly.
-
-            -- Record the move in the stateful @GameRecord@.
-            addGrid $ lastGrid {rep = Map.adjust (const $ Filled moveColour) (x,y) rep}
-            (if allowAmbiguity then space else void $ some newline) :: MonadStack () -- allow arbitrary whitespace when parsing ambiguously, otherwise just newlines.
-    where
-        -- | Parse a set of coordinates written as "(x,y)".
-        parseCoords :: MonadStack (Int, Int)
-        parseCoords = do
-            char '('
-            x <- decimal
-            char ','
-            y <- decimal
-            char ')'
-            pure (x,y)
-
 -- | @parsePlayers@ parses the names of the players when they're declared at the top of a .gridlock file.
 parsePlayers :: MonadStack ()
 parsePlayers = do
@@ -264,6 +200,70 @@ parseColours = do
         -- | Matches to any @Colour@'s lower-case string representation, returning that @Colour@.
         colour :: MonadStack Colour
         colour = choice $ map parseColour [Red .. Cyan]
+
+-- | Parse a line of text describing a Gridlock move, verifying that it is a valid move. 
+parseMove :: MonadStack ()
+parseMove = do
+    {- If the Boolean value below is @False@, parsing will be done strictly, exactly following the syntax
+    in the coursework spec. Otherwise, more freedom in the syntax and room for ambiguity (hence the
+    parameter name) is allowed. -}
+    allowAmbiguity <- ask
+
+    -- Parse the name and validate that it is valid.
+    (get >>= \GameRecord{players} -> do
+        player <- manyTill alphaNumChar $ lookAhead $ string " plays "
+        {-  Add the player to the stateful @GameRecord@ if there are less than two recorded players and the player is
+            not already recorded. When parsing strictly, @length (players record) == 2@ already so this doesn't triger. -}
+        when (length players < 2) $ unless (player `elem` players) $ addPlayer player
+        pure player) >>= \player ->
+            
+        -- Validate that the player's name is valid and that it is this player's turn.
+        get >>= \record@GameRecord{players} -> do
+            unless (player `elem` players) $ fail $ player ++ " is not a valid player."
+            unless (getPlayerInNMoves 1 record == player) $ fail $ player ++ " is playing out of turn. It is " ++ getPlayerInNMoves 1 record ++ "'s turn."
+            -- Note: the second case should cover the first, but the first is included to produce a better error message.
+    -- The unconventional syntax above is so that record punning can be used on the results of both @get@s, and so @player@ can be used in both blocks.
+
+    string " plays "
+
+    -- Parse the move's colour, verifying that it is a valid colour if doing so strictly. 
+    moveColour <- get >>= \GameRecord{colours} -> choice $ map parseColour (if allowAmbiguity then [Red .. Cyan] else Set.toList colours)
+    {-  When parsing ambiguously, add the colour to the stateful @GameRecord@. As the colours are stored in a @Set@,
+        this will do nothing if the colour is already present. -}
+    when allowAmbiguity $ addColour moveColour
+
+    -- Parse the move's position and verify that the resulting move is valid.
+    get >>= \GameRecord{grids} -> do
+        -- Get the field's from the last grid with record wildcards.
+        let lastGrid@Grid{..} = last grids
+
+        string " at "
+        (x,y) <- parseCoords
+
+        -- Verify that the move is valid and error if it isn't.
+        if x < 0 || x >= width || y < 0 || y >= height then
+            fail $ "Move at " ++ show (x,y) ++ " is invalid as it is out of bounds."
+        else if rep Map.! (x,y) /= Empty then
+            fail $ "Move at " ++ show (x,y) ++ " is invalid as this cell is already filled."
+        else if any ((== (Just $ Filled moveColour)) . (rep Map.!?)) [(x-1,y), (x+1,y), (x,y-1), (x,y+1)] then
+            -- ^ Test every surrounding cell to see if it has the colour of the current move.
+            fail $ "Move at " ++ show (x,y) ++ " is invalid as an adjacent cell already has this colour."
+        else do
+            (if allowAmbiguity then optional else fmap Just) $ char '.' -- Require a full stop when parsing strictly.
+
+            -- Record the move in the stateful @GameRecord@.
+            addGrid $ lastGrid {rep = Map.adjust (const $ Filled moveColour) (x,y) rep}
+            (if allowAmbiguity then space else void $ some newline) :: MonadStack () -- allow arbitrary whitespace when parsing ambiguously, otherwise just newlines.
+    where
+        -- | Parse a set of coordinates written as "(x,y)".
+        parseCoords :: MonadStack (Int, Int)
+        parseCoords = do
+            char '('
+            x <- decimal
+            char ','
+            y <- decimal
+            char ')'
+            pure (x,y)
 
 {- | Used in @parseMove@ and @parseColours@, @parseColour@ takes a colour, matches to its lower-case
     @String@ representation and returns the colour. -}
