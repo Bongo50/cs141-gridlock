@@ -1,7 +1,7 @@
 module Gridlock.Types where
 
-import Data.Map (Map)
-import Data.Set (Set)
+import Data.Map ( Map )
+import Data.Set ( Set )
 
 --------------------------------------------------------------------------------
 
