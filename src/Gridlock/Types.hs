@@ -1,8 +1,7 @@
 module Gridlock.Types where
 
 import Data.Map (Map)
-import Data.Set (Set, empty)
-import Data.Char (toLower)
+import Data.Set (Set)
 
 --------------------------------------------------------------------------------
 
@@ -36,9 +35,6 @@ data Cell = Empty | Filled Colour
 data Colour = Red | Green | Yellow | Blue | Magenta | Cyan
     deriving (Eq, Ord, Bounded, Enum, Read, Show)
 
-displayColour :: Colour -> String
-displayColour = map toLower . show
-
 -- | A GameRecord is a complete record of a full game.
 data GameRecord = GameRecord
     { players :: [Player]
@@ -49,9 +45,3 @@ data GameRecord = GameRecord
     -- ^ The list of colours in the game.
     }
     deriving (Eq, Ord, Read, Show)
-
-emptyRecord :: GameRecord
-emptyRecord = GameRecord
-    { players = []
-    , grids = []
-    , colours = empty }
