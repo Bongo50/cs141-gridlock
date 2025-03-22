@@ -19,6 +19,8 @@ main = do
 
     -- Check the file extension.
     if not ambiguous && (drop (length filename - length fileExtension) filename /= fileExtension) then do
+        {-  I considered using @takeExtension@ from System.FilePath (https://hackage.haskell.org/package/filepath-1.5.4.0/docs/System-FilePath.html)
+            here, but it didn't seem worth importing the entire filepath library just for this one function. -}
         putStrLn $ "Can't read " ++ filename ++ " as it is not a .gridlock file."
         putStrLn "Consider using the ambiguous -a flag."
     else do

@@ -1,0 +1,21 @@
+GRIDLOCK
+Players: p1, p2.
+Grid: 5x4.
+Colours: red, blue.
+
+p1 plays red at (1,1).
+p2 plays blue at (2,1).
+p1 plays blue at (1,2).
+p2 plays red at (0,0).
+p1 plays blue at (1,0).
+p2 plays red at (3,2).
+p1 plays blue at (4,2).
+p2 plays blue at (2,3).
+p1 plays red at (3,0).
+p2 plays blue at (4,0).
+p1 plays red at (4,1).
+p2 plays blue at (0,1).
+p1 plays red at (4,3).
+p2 plays red at (0,3).
+p1 cannot move.
+p2 wins!
