@@ -46,7 +46,7 @@ parseGame = do
     {- If the Boolean value below is @False@, parsing will be done strictly, exactly following the syntax
     in the coursework spec. Otherwise, more freedom in the syntax and room for ambiguity (hence the
     parameter name) is allowed. -}
-    allowAmbiguity <- ask 
+    allowAmbiguity <- ask
     -- If ambiguity is allowed, some things are optional.
     let optionality = (if allowAmbiguity then optional else fmap Just) :: MonadStack a -> MonadStack (Maybe a)
     -- If ambiguity is allowed, more relaxed whitespace is allowed.
@@ -72,7 +72,7 @@ parseGame = do
             }
 
     {-  Parse lines describing moves until "cannot move" or "wins!" lines are reached, or the file ends. -}
-    manyTill parseMove (try $ choice [void $ lookAhead $ manyTill alphaNumChar $ string " cannot move", void $ lookAhead $ manyTill alphaNumChar $ string " wins!", lookAhead eof])
+    manyTill parseMove (try $ choice [void $ try $ lookAhead $ manyTill alphaNumChar $ string " cannot move", void $ try $ lookAhead $ manyTill alphaNumChar $ string " wins!", lookAhead eof])
 
     {-  Deal with the possibility that the current stateful @GameRecord@ might not contain both players'
         names, filling it in with dummy names as required. -}
@@ -89,16 +89,18 @@ parseGame = do
 
     {-  Parse the "cannot move", "wins!" lines that should be at the end of the file and check that
         the loss is valid. -}
-    let winner = getPlayerInNMoves 0 finalRecord
-    let loser = getPlayerInNMoves 1 finalRecord
-    optionality $ string $ loser ++ " cannot move."
+    let winner = getPlayerInNMoves 0 finalRecord -- The winner is the player who played last.
+    let loser = getPlayerInNMoves 1 finalRecord -- The loser would be the person playing next, but they can't.
+    -- When parsing strictly, only allow the first option below. Otherwise, allow any.
+    (if allowAmbiguity then choice else head)
+        [ try (string (loser ++ " cannot move.") >> whitespace >> string (winner ++ " wins!") >> eof)
+        , try (string (loser ++ " cannot move.") >> eof)
+        , try (string (winner ++ " wins!") >> eof)
+        , eof ]
     canMove <- lift $ lift checkCanMove
     if canMove then
         fail $ "Invalid loss as " ++ loser ++ " can move."
     else do
-        whitespace
-        optionality $ string $ winner ++ " wins!"
-        --fail $ show finalRecord
         pure finalRecord
 
 -- | Parse a line of text describing a Gridlock move, verifying that it is a valid move. 

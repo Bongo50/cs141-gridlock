@@ -1,48 +1,23 @@
--- This is the main entry point for your Gridlock application.
-
+-- Main entry point.
 import Gridlock.DrawGrid ( drawGrid )
 import Gridlock.Parser ( parseGame )
 import Gridlock.Types ( GameRecord(grids, players) )
-import Gridlock.Utils ( emptyRecord )
+import Gridlock.Utils ( fileExtension, emptyRecord, getPlayerInNMoves )
+import Gridlock.Args ( programArgs, RuntimeArgs(ambiguous, filename) )
 import Text.Megaparsec ( runParserT, errorBundlePretty )
 import Control.Monad.State.Lazy ( evalState )
 import Control.Monad.Reader ( runReaderT )
+import Options.Applicative ( execParser )
 
-import Options.Applicative hiding (Parser)
-import qualified Options.Applicative as Opt
-
-fileExtension :: String
-fileExtension = ".gridlock"
-
--- https://hackage.haskell.org/package/optparse-applicative-0.18.1.0#readme
-data RuntimeArgs = RuntimeArgs
-    { filename      :: String
-    , ambiguous     :: Bool }
-
-handleArgs :: Opt.Parser RuntimeArgs
-handleArgs = RuntimeArgs
-      <$> strOption
-          ( long "filename"
-         <> long "file"
-         <> short 'f'
-         <> metavar "FILENAME"
-         <> help "Filename to read to/save from" )
-      <*> switch
-          ( long "ambiguous"
-         <> short 'a'
-         <> help "Whether to allow less strict, potentially ambiguous, parsing" )
-
-opts :: ParserInfo RuntimeArgs
-opts = info (handleArgs <**> helper)
-  ( fullDesc
-  <> progDesc "Parse and display Gridlock games from .gridlock files"
-  <> header "Gridlock Helper" )
-
+{- | The entrypoint to the program. This function handles arguments, runs the parser and outputs the game in a human-
+    readable way. -}
 main :: IO ()
 main = do
-    args <- execParser opts
+    -- Parse and handle arguments using optparse-applicative.
+    args <- execParser programArgs
     let file = filename args
 
+    -- Check the file extension.
     if not (ambiguous args) && (drop (length file - length fileExtension) file /= fileExtension) then do
         putStrLn $ "Can't read " ++ file ++ " as it is not a .gridlock file."
         putStrLn "Consider using the ambiguous -a flag."
@@ -50,6 +25,7 @@ main = do
         fContents <- readFile file
         putStrLn $ "Displaying " ++ file ++ ":"
 
+        -- Run the parser.
         case evalState (runParserT (runReaderT parseGame $ ambiguous args) file fContents) emptyRecord of
             Left e -> putStrLn $ errorBundlePretty e
             Right record -> do
@@ -59,9 +35,12 @@ main = do
                 let startingGrid = head $ grids record
                 let otherGrids = tail $ grids record
 
+                -- The starting grid is drawn separetely as no-one plays to produce it.
                 putStrLn $ drawGrid startingGrid
+                -- Output each grid, along with who played the move to produce it.
                 mapM_ (\(p,g) -> putStrLn "" >> putStrLn (p ++ " plays:") >> putStrLn (drawGrid g)) (zip (cycle $ players record) otherGrids)
 
+                -- Output informtion about the winner and looser. 
                 putStrLn ""
-                putStrLn $ (players record !! ((length (grids record) + 1) `mod` 2)) ++ " can't move."
-                putStrLn $ (players record !! (length (grids record) `mod` 2)) ++ " wins!"
+                putStrLn $ getPlayerInNMoves 1 record ++ " can't move."
+                putStrLn $ getPlayerInNMoves 0 record ++ " wins!"

@@ -1,8 +1,14 @@
-Players: Amy,            Bill.
-Grid:3    x  3
-Colours: red.
-Amy Amy red at (0,0).            
-Bill Amy red at (2,0)
-Amy Amy green at (1,1).
-Bill Amy red at (0,2).
-Amy Amy red at (2,2).
+    Players: Amy. Grid:3    x  3
+
+
+Amy plays red at (0,0).
+
+Bill plays red at (2,0).
+
+
+Amy plays green at (1,1).  
+                  Bill plays red at (0,2).
+                  Amy plays red at (2,2).
+
+
+Amy wins!

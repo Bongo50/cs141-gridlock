@@ -33,6 +33,7 @@ import System.FilePath (dropExtension, takeExtension)
 import Gridlock.DrawGrid
 import Gridlock.Parser
 import Gridlock.Types
+import Gridlock.Utils
 
 import Control.Monad (forM)
 import System.Directory.Internal.Prelude (getArgs)
